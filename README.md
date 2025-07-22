@@ -57,7 +57,7 @@ The plugin is optimized for metric coordinate reference systems:
 ### Method 2: Development Setup
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/qgis-photogrammetry-tools.git
+git clone https://github.com/rivantesifat/qgis-photogrammetry-tools.git
 
 # Create symbolic link to QGIS plugins directory
 # Linux/macOS:
@@ -209,8 +209,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/yourusername/qgis-photogrammetry-tools/issues)
-- 💡 **Feature Requests**: [GitHub Issues](https://github.com/yourusername/qgis-photogrammetry-tools/issues)
+- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/rivantesifat/qgis-photogrammetry-tools/issues)
+- 💡 **Feature Requests**: [GitHub Issues](https://github.com/rivantesifat/qgis-photogrammetry-tools/issues)
 - 📧 **Email**: nashidsifat@outlook.com
 
 ## Acknowledgments
