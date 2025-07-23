@@ -6,6 +6,7 @@ A comprehensive QGIS plugin designed for photogrammetry workflows, providing ess
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Status](https://img.shields.io/badge/status-stable-brightgreen.svg) 
 <br>
+<div align="center">
 ![Project Screenshot](Demo.jpg)
 
 ## Overview
