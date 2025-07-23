@@ -8,6 +8,7 @@ A comprehensive QGIS plugin designed for photogrammetry workflows, providing ess
 <br>
 <div align="center">
 ![Project Screenshot](Demo.jpg)
+</div>
 
 ## Overview
 
