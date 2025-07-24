@@ -25,18 +25,34 @@ class PhotogrammetryToolsDock(QDockWidget):
         self.setObjectName("PhotogrammetryToolsDock")
         self.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
 
-        # Main widget with scroll area
+        # Create main widget
         self.main_widget = QWidget()
-        self.main_layout = QVBoxLayout()
-        self.main_widget.setLayout(self.main_layout)
+        self.setWidget(self.main_widget)
+
+        # Create main layout
+        main_layout = QVBoxLayout(self.main_widget)
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(2)
 
         # Create scroll area
-        scroll_widget = QWidget()
-        self.scroll_layout = QVBoxLayout(scroll_widget)
-        self.main_layout.addWidget(scroll_widget)
+        from qgis.PyQt.QtWidgets import QScrollArea
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setFrameShape(QFrame.NoFrame)
 
-        # Make main widget scrollable
-        self.setWidget(self.main_widget)
+        # Create scrollable content widget
+        scroll_content = QWidget()
+        self.scroll_layout = QVBoxLayout(scroll_content)
+        self.scroll_layout.setContentsMargins(5, 5, 5, 5)
+        self.scroll_layout.setSpacing(8)
+
+        # Set the scroll content as the scroll area's widget
+        scroll_area.setWidget(scroll_content)
+
+        # Add scroll area to main layout
+        main_layout.addWidget(scroll_area)
 
         # ========================
         # Global CRS Selector
@@ -95,8 +111,13 @@ class PhotogrammetryToolsDock(QDockWidget):
         self.btn_qc_smart_geofill.setStyleSheet("background-color: #FFC107; font-weight: bold;")
         self.btn_qc_smart_geofill.clicked.connect(lambda: self.set_qc_remarks('Smart Geofill'))
 
+        self.btn_qc_solved = QPushButton("Solved")
+        self.btn_qc_solved.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold;")
+        self.btn_qc_solved.clicked.connect(lambda: self.set_qc_status('Solved'))
+
         qc_layout.addWidget(self.btn_qc_done)
         qc_layout.addWidget(self.btn_qc_smart_geofill)
+        qc_layout.addWidget(self.btn_qc_solved)
         qc_group.setLayout(qc_layout)
         self.scroll_layout.addWidget(qc_group)
 
@@ -164,6 +185,14 @@ class PhotogrammetryToolsDock(QDockWidget):
         geom_layout.addWidget(self.geom_combo)
         vector_layout.addLayout(geom_layout)
 
+        # Layer Type Selection
+        layer_type_layout = QHBoxLayout()
+        layer_type_layout.addWidget(QLabel("Layer Type:"))
+        self.layer_type_combo = QComboBox()
+        self.layer_type_combo.addItems(["Save to File", "Temporary Scratch Layer"])
+        layer_type_layout.addWidget(self.layer_type_combo)
+        vector_layout.addLayout(layer_type_layout)
+
         # Vector Creation Button
         self.btn_create_vector = QPushButton("Create Vector Layer")
         self.btn_create_vector.clicked.connect(self.create_vector_layer)
@@ -189,6 +218,14 @@ class PhotogrammetryToolsDock(QDockWidget):
         btn_line_intersections = QPushButton("Generate Line Intersection Points")
         btn_line_intersections.clicked.connect(self.generate_line_intersections)
         conversion_layout.addWidget(btn_line_intersections)
+
+        conversion_group.setLayout(conversion_layout)
+        self.scroll_layout.addWidget(conversion_group)
+
+        # Merge Vector Layers
+        btn_merge_layers = QPushButton("Merge Vector Layers")
+        btn_merge_layers.clicked.connect(self.merge_vector_layers)
+        conversion_layout.addWidget(btn_merge_layers)
 
         conversion_group.setLayout(conversion_layout)
         self.scroll_layout.addWidget(conversion_group)
@@ -416,7 +453,7 @@ class PhotogrammetryToolsDock(QDockWidget):
                                 f"Output CRS: {crs.description()}")
 
     def create_vector_layer(self):
-        """Create empty vector layer with proper CRS handling"""
+        """Create empty vector layer with proper CRS handling - supports both file and temporary layers"""
         # Get selected geometry type
         geom_type = self.geom_combo.currentText()
         if geom_type == "Point":
@@ -432,35 +469,90 @@ class PhotogrammetryToolsDock(QDockWidget):
         if not crs:
             return
 
-        path, _ = QFileDialog.getSaveFileName(self, "Save Vector Layer", "", "Shapefiles (*.shp)")
-        if not path:
-            return
+        # Check if user wants temporary or file-based layer
+        layer_type = self.layer_type_combo.currentText()
 
-        layer_name = os.path.splitext(os.path.basename(path))[0]
+        if layer_type == "Temporary Scratch Layer":
+            # Get custom layer name from user
+            default_name = f"Temp_{geom_type}_Layer"
+            layer_name, ok = QInputDialog.getText(
+                self,
+                "Layer Name",
+                "Enter name for the scratch layer:",
+                QLineEdit.Normal,
+                default_name
+            )
 
-        fields = QgsFields()
-        fields.append(QgsField("id", QVariant.Int))
+            # Check if user cancelled or entered empty name
+            if not ok:
+                return
 
-        writer = QgsVectorFileWriter(
-            path, "UTF-8", fields,
-            qgis_geom_type, crs, "ESRI Shapefile"
-        )
+            if not layer_name.strip():
+                layer_name = default_name
+            else:
+                layer_name = layer_name.strip()
 
-        if writer.hasError() != QgsVectorFileWriter.NoError:
-            QMessageBox.critical(self, "Error", f"File error: {writer.errorMessage()}")
-            return
+            # Create memory layer string
+            if geom_type == "Point":
+                geom_string = "Point"
+            elif geom_type == "Polygon":
+                geom_string = "Polygon"
 
-        del writer
-        layer = QgsVectorLayer(path, layer_name, "ogr")
-        QgsProject.instance().addMapLayer(layer)
+            # Create the memory layer with CRS
+            memory_layer_string = f"{geom_string}?crs={crs.authid()}&field=id:integer"
+            layer = QgsVectorLayer(memory_layer_string, layer_name, "memory")
 
-        # Set project CRS for consistent measurements
-        QgsProject.instance().setCrs(crs)
-        self.iface.mapCanvas().setDestinationCrs(crs)
-        self.iface.mapCanvas().refresh()
+            if not layer.isValid():
+                QMessageBox.critical(self, "Error", "Failed to create temporary layer!")
+                return
 
-        QMessageBox.information(self, "Success",
-                                f"{geom_type} layer created with CRS: {crs.description()}")
+            # Add layer to project
+            QgsProject.instance().addMapLayer(layer)
+
+            # Set project CRS for consistent measurements
+            QgsProject.instance().setCrs(crs)
+            self.iface.mapCanvas().setDestinationCrs(crs)
+            self.iface.mapCanvas().refresh()
+
+            QMessageBox.information(self, "Success",
+                                    f"Temporary {geom_type} layer created\n"
+                                    f"Layer name: {layer_name}\n"
+                                    f"CRS: {crs.description()}\n"
+                                    f"Note: This layer will be lost when QGIS is closed unless saved!")
+
+        else:
+            # Original file-based layer creation
+            path, _ = QFileDialog.getSaveFileName(self, "Save Vector Layer", "", "Shapefiles (*.shp)")
+            if not path:
+                return
+
+            layer_name = os.path.splitext(os.path.basename(path))[0]
+
+            fields = QgsFields()
+            fields.append(QgsField("id", QVariant.Int))
+
+            writer = QgsVectorFileWriter(
+                path, "UTF-8", fields,
+                qgis_geom_type, crs, "ESRI Shapefile"
+            )
+
+            if writer.hasError() != QgsVectorFileWriter.NoError:
+                QMessageBox.critical(self, "Error", f"File error: {writer.errorMessage()}")
+                return
+
+            del writer
+            layer = QgsVectorLayer(path, layer_name, "ogr")
+            QgsProject.instance().addMapLayer(layer)
+
+            # Set project CRS for consistent measurements
+            QgsProject.instance().setCrs(crs)
+            self.iface.mapCanvas().setDestinationCrs(crs)
+            self.iface.mapCanvas().refresh()
+
+            QMessageBox.information(self, "Success",
+                                    f"{geom_type} layer created and saved to file\n"
+                                    f"Path: {path}\n"
+                                    f"CRS: {crs.description()}")
 
     def polygons_to_lines(self):
         """Convert polygons to lines"""
@@ -579,6 +671,162 @@ class PhotogrammetryToolsDock(QDockWidget):
                                     f"Intersection points created with CRS: {crs.description()}")
         else:
             QMessageBox.critical(self, "Error", "Failed to create intersection layer!")
+
+    def merge_vector_layers(self):
+        """Merge multiple vector layers of the same geometry type"""
+        # Get all vector layers grouped by geometry type
+        all_layers = QgsProject.instance().mapLayers().values()
+        vector_layers = [layer for layer in all_layers
+                         if layer.type() == QgsVectorLayer.VectorLayer]
+
+        if len(vector_layers) < 2:
+            QMessageBox.warning(self, "Not Enough Layers",
+                                "Please load at least two vector layers in the project!")
+            return
+
+        # Group layers by geometry type
+        point_layers = [layer for layer in vector_layers
+                        if layer.geometryType() == QgsWkbTypes.PointGeometry]
+        polygon_layers = [layer for layer in vector_layers
+                          if layer.geometryType() == QgsWkbTypes.PolygonGeometry]
+        line_layers = [layer for layer in vector_layers
+                       if layer.geometryType() == QgsWkbTypes.LineGeometry]
+
+        # Create options list
+        geometry_options = []
+        layer_groups = {}
+
+        if len(point_layers) >= 2:
+            geometry_options.append("Point Layers")
+            layer_groups["Point Layers"] = point_layers
+
+        if len(polygon_layers) >= 2:
+            geometry_options.append("Polygon Layers")
+            layer_groups["Polygon Layers"] = polygon_layers
+
+        if len(line_layers) >= 2:
+            geometry_options.append("Line Layers")
+            layer_groups["Line Layers"] = line_layers
+
+        if not geometry_options:
+            QMessageBox.warning(self, "No Compatible Layers",
+                                "You need at least 2 layers of the same geometry type to merge!")
+            return
+
+        # Let user select geometry type
+        geom_type, ok1 = QInputDialog.getItem(self, "Select Geometry Type",
+                                              "Choose the type of layers to merge:",
+                                              geometry_options, 0, False)
+        if not ok1 or not geom_type:
+            return
+
+        # Get available layers for selected geometry type
+        available_layers = layer_groups[geom_type]
+        layer_names = [layer.name() for layer in available_layers]
+
+        # Let user select which layers to merge (multiple selection dialog)
+        selected_layers = self._multi_select_dialog("Select Layers to Merge",
+                                                    "Choose layers to merge:",
+                                                    layer_names)
+        if not selected_layers or len(selected_layers) < 2:
+            QMessageBox.warning(self, "Insufficient Selection",
+                                "Please select at least 2 layers to merge!")
+            return
+
+        # Get CRS
+        crs = self.get_selected_crs()
+        if not crs:
+            return
+
+        # Get output path
+        path, _ = QFileDialog.getSaveFileName(self, "Save Merged Layer", "", "Shapefiles (*.shp)")
+        if not path:
+            return
+
+        layer_name = os.path.splitext(os.path.basename(path))[0]
+
+        # Find the actual layer objects
+        layers_to_merge = [layer for layer in available_layers
+                           if layer.name() in selected_layers]
+
+        try:
+            # Merge layers using QGIS algorithm
+            processing.run("native:mergevectorlayers", {
+                'LAYERS': layers_to_merge,
+                'CRS': crs,
+                'OUTPUT': path
+            })
+
+            # Load the merged layer
+            merged_layer = QgsVectorLayer(path, layer_name, "ogr")
+            if merged_layer.isValid():
+                QgsProject.instance().addMapLayer(merged_layer)
+
+                # Set project CRS for consistent measurements
+                QgsProject.instance().setCrs(crs)
+                self.iface.mapCanvas().setDestinationCrs(crs)
+                self.iface.mapCanvas().refresh()
+
+                # Zoom to layer for verification
+                self.iface.mapCanvas().setExtent(merged_layer.extent())
+                self.iface.mapCanvas().refresh()
+
+                # Count total features
+                total_features = merged_layer.featureCount()
+
+                QMessageBox.information(self, "Success",
+                                        f"Successfully merged {len(selected_layers)} layers\n"
+                                        f"Total features: {total_features}\n"
+                                        f"Output CRS: {crs.description()}")
+            else:
+                QMessageBox.critical(self, "Error", "Failed to load merged layer!")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Merge Error", f"Failed to merge layers:\n{str(e)}")
+
+    def _multi_select_dialog(self, title, label, items):
+        """Helper function to create a multi-selection dialog"""
+        from qgis.PyQt.QtWidgets import QDialog, QVBoxLayout, QListWidget, QDialogButtonBox, QLabel
+        from qgis.PyQt.QtCore import Qt
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        dialog.setModal(True)
+        dialog.resize(300, 400)
+
+        layout = QVBoxLayout()
+
+        # Add label
+        layout.addWidget(QLabel(label))
+
+        # Create list widget
+        list_widget = QListWidget()
+        list_widget.setSelectionMode(QListWidget.MultiSelection)
+
+        # Add items
+        for item in items:
+            list_widget.addItem(item)
+
+        layout.addWidget(list_widget)
+
+        # Add buttons
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+
+        dialog.setLayout(layout)
+
+        # Show dialog and get results
+        if dialog.exec_() == QDialog.Accepted:
+            selected_items = []
+            for i in range(list_widget.count()):
+                item = list_widget.item(i)
+                if item.isSelected():
+                    selected_items.append(item.text())
+            return selected_items
+
+        return []
 
     def add_bridge_fields(self):
         """Add standard bridge fields to layer including Rework field"""
@@ -758,24 +1006,63 @@ class PhotogrammetryToolsPlugin:
     def __init__(self, iface):
         self.iface = iface
         self.dock_widget = None
+        self.toolbar_action = None
 
     def initGui(self):
+        # Create the dock widget
         self.dock_widget = PhotogrammetryToolsDock(self.iface)
         self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dock_widget)
 
-        self.menu = QAction("Photogrammetry Tools")
-        self.menu.triggered.connect(self.toggle_dock_visibility)
-        self.iface.addPluginToMenu("&Photogrammetry Tools", self.menu)
+        # Create toolbar action with icon
+        self.toolbar_action = QAction("Photogrammetry Tools")
+        self.toolbar_action.setToolTip("Toggle Photogrammetry Tools Panel")
+
+        # Set icon - you can use a built-in QGIS icon or provide your own
+        # Using a built-in QGIS icon for now
+        self.toolbar_action.setIcon(QIcon(os.path.join(os.path.dirname(__file__), "UAV.png")))
+
+        # Make it checkable so it shows active/inactive state
+        self.toolbar_action.setCheckable(True)
+        self.toolbar_action.setChecked(True)  # Start as checked since dock is visible
+
+        # Connect to toggle function
+        self.toolbar_action.triggered.connect(self.toggle_dock_visibility)
+
+        # Add to toolbar
+        self.iface.addToolBarIcon(self.toolbar_action)
+
+        # Also add to menu for convenience
+        self.menu_action = QAction("Photogrammetry Tools")
+        self.menu_action.triggered.connect(self.toggle_dock_visibility)
+        self.iface.addPluginToMenu("&Photogrammetry Tools", self.menu_action)
+
+        # Connect dock visibility changes to update toolbar button state
+        self.dock_widget.visibilityChanged.connect(self.on_dock_visibility_changed)
 
     def unload(self):
+        # Remove toolbar icon
+        if self.toolbar_action:
+            self.iface.removeToolBarIcon(self.toolbar_action)
+            self.toolbar_action = None
+
+        # Remove dock widget
         if self.dock_widget:
             self.iface.removeDockWidget(self.dock_widget)
             self.dock_widget.deleteLater()
             self.dock_widget = None
 
-        self.iface.removePluginMenu("&Photogrammetry Tools", self.menu)
-        del self.menu
+        # Remove menu item
+        if hasattr(self, 'menu_action'):
+            self.iface.removePluginMenu("&Photogrammetry Tools", self.menu_action)
+            del self.menu_action
 
     def toggle_dock_visibility(self):
+        """Toggle the visibility of the dock widget"""
         if self.dock_widget:
-            self.dock_widget.setVisible(not self.dock_widget.isVisible())
+            is_visible = self.dock_widget.isVisible()
+            self.dock_widget.setVisible(not is_visible)
+
+    def on_dock_visibility_changed(self, visible):
+        """Update toolbar button state when dock visibility changes"""
+        if self.toolbar_action:
+            self.toolbar_action.setChecked(visible)
