@@ -50,7 +50,10 @@ The plugin is optimized for metric coordinate reference systems:
 ## Installation
 
 ### Method 1: Manual Installation
-1. Download the plugin files
+1. Download the plugin Zip file. 
+2. Go to Plugins> Manage and Install Plugins...> Install from ZIP> Browse the downloaded file 
+Or
+1. Download and Extract the ZIP
 2. Copy to your QGIS plugins directory:
    - **Windows**: `C:\Users\[username]\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\photogrammetry_tools\`
    - **macOS**: `~/Library/Application Support/QGIS/QGIS3/profiles/default/python/plugins/photogrammetry_tools/`
@@ -145,6 +148,7 @@ Includes all Bridge fields plus:
 - **Buffer Creation**: Uses `native:buffer` with 50 segments and round joins
 - **Line Intersections**: Uses `native:lineintersections` for point generation
 - **Polygon to Lines**: Uses `native:polygonstolines` for conversion
+- **Merge Vector Layers**: Uses `native:mergevectorlayers` for Merging
 
 ### Error Handling
 - Input validation for numeric fields
