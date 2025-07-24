@@ -1,7 +1,32 @@
+
 [general]
 name=Photogrammetry Tools
 qgisMinimumVersion=3.0
-description=Tools for photogrammetry workflows
+description=Tools for photogrammetry workflows including grid creation, buffer tools, vector management, field management, and QC status updates
 version=1.3
 author=Md. Nashid Kamal Sifat
 email=nashidsifat@outlook.com
+
+about=A comprehensive plugin for photogrammetry workflows featuring:
+    - Grid creation with precise measurements
+    - Buffer tools with smooth edges
+    - Vector layer creation (file-based and temporary scratch layers)
+    - Vector layer merging capabilities
+    - Field management for bridge and seamline workflows
+    - Production and QC status updaters
+    - Export tools for selected features
+    - CRS management and coordinate transformations
+
+changelog=Version 1.1:
+    - Added toolbar icon for easy access
+    - Enhanced vector creation with temporary scratch layer option
+    - Added "Solved" status for QC updates
+    - Implemented vector layer merge functionality
+    - Improved scrolling interface for better tool accessibility
+    - Added layer renaming dialog for scratch layers
+
+tags=photogrammetry,vector,grid,buffer,field management,QC,production,workflow
+
+category=Plugins
+hasProcessingProvider=no
+deprecated=False
