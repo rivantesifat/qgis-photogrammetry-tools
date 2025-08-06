@@ -295,7 +295,7 @@ We welcome contributions! Here's how to help:
 
 # 🏷️ Version History
 
-### Version 2.0.0 (Current)
+### Version 1.3.2 (Current)
 - ✨ Added intelligent feature distribution tool using K-means clustering
 - ✨ Enhanced field management with Rework field support
 - ✨ Added trim fields functionality to remove non-standard fields
