@@ -3,7 +3,8 @@ import math
 from qgis.PyQt.QtWidgets import (QDockWidget, QPushButton, QVBoxLayout, QWidget,
                                  QFileDialog, QMessageBox, QHBoxLayout, QLabel,
                                  QAction, QFrame, QComboBox, QLineEdit,
-                                 QGroupBox, QInputDialog)
+                                 QGroupBox, QInputDialog, QRadioButton, QButtonGroup,
+                                 QSpinBox, QDialog, QDialogButtonBox, QTextEdit)
 from qgis.PyQt import QtGui
 from qgis.PyQt.QtCore import Qt
 from qgis.core import (QgsVectorLayer, QgsProject, QgsRectangle, QgsFeature,
@@ -13,6 +14,44 @@ from qgis.core import (QgsVectorLayer, QgsProject, QgsRectangle, QgsFeature,
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtCore import QVariant
 import processing
+
+
+class DistributionResultDialog(QDialog):
+    def __init__(self, distribution_info, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Distribution Results")
+        self.setModal(True)
+        self.resize(400, 300)
+
+        layout = QVBoxLayout()
+
+        # Add distribution information
+        info_label = QLabel("Distribution Summary:")
+        layout.addWidget(info_label)
+
+        # Text area for distribution details
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setPlainText(distribution_info)
+        layout.addWidget(text_edit)
+
+        # Question label
+        question_label = QLabel("Are you satisfied with this distribution?")
+        layout.addWidget(question_label)
+
+        # Custom buttons
+        button_layout = QHBoxLayout()
+        self.yes_button = QPushButton("Yes, Save Parts")
+        self.no_button = QPushButton("No, Cancel")
+
+        self.yes_button.clicked.connect(self.accept)
+        self.no_button.clicked.connect(self.reject)
+
+        button_layout.addWidget(self.yes_button)
+        button_layout.addWidget(self.no_button)
+        layout.addLayout(button_layout)
+
+        self.setLayout(layout)
 
 
 class PhotogrammetryToolsDock(QDockWidget):
@@ -126,6 +165,55 @@ class PhotogrammetryToolsDock(QDockWidget):
         separator.setFrameShape(QFrame.HLine)
         separator.setFrameShadow(QFrame.Sunken)
         self.scroll_layout.addWidget(separator)
+
+        # ========================
+        # DISTRIBUTING FEATURES TOOL (NEW)
+        # ========================
+        distribute_group = QGroupBox("Distributing Features")
+        distribute_group.setCheckable(True)
+        distribute_group.setChecked(False)
+        distribute_layout = QVBoxLayout()
+
+        # Distribution method selection
+        dist_method_layout = QVBoxLayout()
+        dist_method_layout.addWidget(QLabel("Distribution Method:"))
+
+        self.dist_button_group = QButtonGroup()
+        self.radio_by_points = QRadioButton("By Number of Points per Part")
+        self.radio_by_parts = QRadioButton("By Number of Parts")
+        self.radio_by_points.setChecked(True)  # Default selection
+
+        self.dist_button_group.addButton(self.radio_by_points, 0)
+        self.dist_button_group.addButton(self.radio_by_parts, 1)
+
+        dist_method_layout.addWidget(self.radio_by_points)
+        dist_method_layout.addWidget(self.radio_by_parts)
+        distribute_layout.addLayout(dist_method_layout)
+
+        # Number input
+        number_layout = QHBoxLayout()
+        number_layout.addWidget(QLabel("Number:"))
+        self.distribute_number = QSpinBox()
+        self.distribute_number.setMinimum(1)
+        self.distribute_number.setMaximum(10000)
+        self.distribute_number.setValue(100)  # Default value
+        number_layout.addWidget(self.distribute_number)
+        distribute_layout.addLayout(number_layout)
+
+        # Distribute button
+        self.btn_distribute = QPushButton("Distribute Features")
+        self.btn_distribute.setIcon(QIcon(":/images/themes/default/mActionSplitFeatures.svg"))
+        self.btn_distribute.clicked.connect(self.distribute_features)
+        distribute_layout.addWidget(self.btn_distribute)
+
+        distribute_group.setLayout(distribute_layout)
+        self.scroll_layout.addWidget(distribute_group)
+
+        # Add separator after new tool
+        separator2 = QFrame()
+        separator2.setFrameShape(QFrame.HLine)
+        separator2.setFrameShadow(QFrame.Sunken)
+        self.scroll_layout.addWidget(separator2)
 
         # ========================
         # Grid Creation Tool
@@ -254,6 +342,17 @@ class PhotogrammetryToolsDock(QDockWidget):
         field_button_layout.addWidget(self.btn_seamline_fields)
 
         field_layout.addLayout(field_button_layout)
+
+        # Add the new Trim Fields button (full width)
+        self.btn_trim_fields = QPushButton("Trim Fields")
+        self.btn_trim_fields.setIcon(QIcon(":/images/themes/default/mActionDeleteAttribute.svg"))
+        self.btn_trim_fields.setStyleSheet("background-color: #ff9999; font-weight: bold;")
+        self.btn_trim_fields.clicked.connect(self.trim_fields)
+        field_layout.addWidget(self.btn_trim_fields)
+
+        field_group.setLayout(field_layout)
+        self.scroll_layout.addWidget(field_group)
+        
         field_group.setLayout(field_layout)
         self.scroll_layout.addWidget(field_group)
 
@@ -275,6 +374,330 @@ class PhotogrammetryToolsDock(QDockWidget):
 
         # Add stretch to push tools to top
         self.scroll_layout.addStretch()
+
+        # =========================================
+        # NEW DISTRIBUTING FEATURES IMPLEMENTATION
+        # =========================================
+
+    def distribute_features(self):
+        """Main function to distribute features into parts"""
+        layer = self.iface.activeLayer()
+        if not layer or layer.type() != QgsVectorLayer.VectorLayer:
+            QMessageBox.warning(self, "Invalid Layer", "Please select a vector layer!")
+            return
+
+        # Check if layer has features
+        if layer.featureCount() == 0:
+            QMessageBox.warning(self, "Empty Layer", "The selected layer has no features!")
+            return
+
+        # Check geometry type (only Point and Polygon supported)
+        geom_type = layer.geometryType()
+        if geom_type not in [QgsWkbTypes.PointGeometry, QgsWkbTypes.PolygonGeometry]:
+            QMessageBox.warning(self, "Unsupported Geometry",
+                                "This tool only supports Point and Polygon layers!")
+            return
+
+        try:
+            # Get distribution parameters
+            distribute_by_points = self.radio_by_points.isChecked()
+            number_value = self.distribute_number.value()
+
+            # Perform clustering
+            clusters, distribution_info = self.perform_clustering(layer, distribute_by_points, number_value)
+
+            if not clusters:
+                QMessageBox.warning(self, "Clustering Failed", "Failed to create clusters!")
+                return
+
+            # Show distribution results dialog
+            result_dialog = DistributionResultDialog(distribution_info, self)
+            if result_dialog.exec_() != QDialog.Accepted:
+                return  # User cancelled
+
+            # Get base name for parts
+            base_name, ok = QInputDialog.getText(
+                self, "Base Name", "Enter base name for parts:",
+                QLineEdit.Normal, f"{layer.name()}_Part"
+            )
+            if not ok or not base_name.strip():
+                return
+
+            base_name = base_name.strip()
+
+            # Get output directory
+            output_dir = QFileDialog.getExistingDirectory(
+                self, "Select Output Directory", QgsProject.instance().homePath()
+            )
+            if not output_dir:
+                return
+
+            # Save clustered parts
+            self.save_clustered_parts(layer, clusters, base_name, output_dir)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"An error occurred during distribution:\n{str(e)}")
+
+    def perform_clustering(self, layer, distribute_by_points, number_value):
+        """Perform clustering based on user selection"""
+        try:
+            # Import required libraries inside the function to avoid plugin loading issues
+            try:
+                from sklearn.cluster import KMeans
+                import numpy as np
+            except ImportError:
+                QMessageBox.critical(self, "Missing Dependencies",
+                                     "This tool requires scikit-learn and numpy libraries.\n\n"
+                                     "To install them:\n"
+                                     "1. Open OSGeo4W Shell (or Command Prompt)\n"
+                                     "2. Run: pip install scikit-learn numpy\n\n"
+                                     "Alternative installation:\n"
+                                     "1. Open QGIS Python Console\n"
+                                     "2. Run: import subprocess; subprocess.check_call(['pip', 'install', 'scikit-learn', 'numpy'])")
+                return None, ""
+
+            # Extract coordinates from features
+            coordinates = []
+            feature_ids = []
+
+            for feature in layer.getFeatures():
+                geom = feature.geometry()
+                if geom.isEmpty():
+                    continue
+
+                if layer.geometryType() == QgsWkbTypes.PointGeometry:
+                    point = geom.asPoint()
+                    coordinates.append([point.x(), point.y()])
+                elif layer.geometryType() == QgsWkbTypes.PolygonGeometry:
+                    centroid = geom.centroid().asPoint()
+                    coordinates.append([centroid.x(), centroid.y()])
+
+                feature_ids.append(feature.id())
+
+            if len(coordinates) < 2:
+                QMessageBox.warning(self, "Insufficient Features",
+                                    "Need at least 2 features for clustering!")
+                return None, ""
+
+            coordinates = np.array(coordinates)
+
+            # Determine number of clusters
+            if distribute_by_points:
+                # By points per part
+                total_features = len(coordinates)
+                n_clusters = max(1, int(np.ceil(total_features / number_value)))
+            else:
+                # By number of parts
+                n_clusters = min(number_value, len(coordinates))
+
+            # Perform K-means clustering
+            kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+            cluster_labels = kmeans.fit_predict(coordinates)
+
+            # Create clusters dictionary
+            clusters = {}
+            for i, (feature_id, cluster_id) in enumerate(zip(feature_ids, cluster_labels)):
+                if cluster_id not in clusters:
+                    clusters[cluster_id] = []
+                clusters[cluster_id].append(feature_id)
+
+            # Generate distribution info
+            distribution_info = f"Total Features: {len(coordinates)}\n"
+            distribution_info += f"Number of Parts Created: {len(clusters)}\n\n"
+            distribution_info += "Distribution Details:\n"
+
+            for cluster_id, feature_ids_in_cluster in clusters.items():
+                distribution_info += f"Part {cluster_id + 1}: {len(feature_ids_in_cluster)} features\n"
+
+            return clusters, distribution_info
+
+        except Exception as e:
+            QMessageBox.critical(self, "Clustering Error", f"Error during clustering:\n{str(e)}")
+            return None, ""
+
+    def update_attribute(self, field_name, value, description):
+        """Generic method to update attributes - FIXED VERSION"""
+        layer = self.iface.activeLayer()
+        if not layer or layer.type() != QgsVectorLayer.VectorLayer:
+            QMessageBox.warning(self, "Invalid Layer", "Please select a vector layer!")
+            return
+
+        field_index = layer.fields().indexFromName(field_name)
+        if field_index == -1:
+            QMessageBox.warning(self, "Missing Field", f"'{field_name}' field not found!")
+            return
+
+        selected = layer.selectedFeatures()
+        if not selected:
+            QMessageBox.warning(self, "No Selection", "Please select features first!")
+            return
+
+        # Get field type to handle conversions properly
+        field = layer.fields().at(field_index)
+        field_type = field.type()
+
+        layer.startEditing()
+        try:
+            for feature in selected:
+                # Convert value based on field type
+                converted_value = self._convert_value_for_field(value, field_type)
+                layer.changeAttributeValue(feature.id(), field_index, converted_value)
+
+            layer.commitChanges()
+
+            self.iface.messageBar().pushSuccess(
+                f"{field_name} Updated",
+                f"Set {description} for {len(selected)} features to '{value}'"
+            )
+        except Exception as e:
+            layer.rollBack()
+            QMessageBox.critical(self, "Update Error",
+                                 f"Failed to update {field_name}:\n{str(e)}")
+
+    def _convert_value_for_field(self, value, field_type):
+        """Convert value to appropriate type for the field"""
+        if field_type == QVariant.Int:
+            # Handle integer fields
+            if value == "" or value is None:
+                return None  # Use NULL instead of empty string
+            try:
+                return int(value)
+            except (ValueError, TypeError):
+                return None
+        elif field_type == QVariant.Double:
+            # Handle double/float fields
+            if value == "" or value is None:
+                return None
+            try:
+                return float(value)
+            except (ValueError, TypeError):
+                return None
+        else:
+            # Handle string fields and others
+            return str(value) if value is not None else ""
+
+    def save_clustered_parts(self, layer, clusters, base_name, output_dir):
+        """Save each cluster as a separate shapefile - FIXED VERSION"""
+        try:
+            saved_files = []
+
+            # Add Part field to layer if it doesn't exist
+            layer.startEditing()
+            provider = layer.dataProvider()
+            fields = provider.fields()
+            part_field_index = fields.indexFromName("Part")
+
+            if part_field_index == -1:
+                provider.addAttributes([QgsField("Part", QVariant.Int)])
+                layer.updateFields()
+                part_field_index = layer.fields().indexFromName("Part")
+
+            # Update Part field for all features - FIXED: Ensure integer values
+            for cluster_id, feature_ids in clusters.items():
+                part_number = int(cluster_id + 1)  # Ensure it's an integer
+                for feature_id in feature_ids:
+                    # Use integer value, not string
+                    layer.changeAttributeValue(feature_id, part_field_index, part_number)
+
+            layer.commitChanges()
+
+            # Save each cluster as separate shapefile
+            for cluster_id, feature_ids in clusters.items():
+                part_name = f"{base_name}_{cluster_id + 1}"
+                output_path = os.path.join(output_dir, f"{part_name}.shp")
+
+                # Create a memory layer for this cluster
+                temp_layer = self.create_cluster_layer(layer, feature_ids, part_name)
+
+                if temp_layer:
+                    # Save to shapefile
+                    save_options = QgsVectorFileWriter.SaveVectorOptions()
+                    save_options.driverName = "ESRI Shapefile"
+                    save_options.fileEncoding = "UTF-8"
+
+                    transform_context = QgsProject.instance().transformContext()
+                    result = QgsVectorFileWriter.writeAsVectorFormatV3(
+                        temp_layer, output_path, transform_context, save_options
+                    )
+
+                    if result[0] == QgsVectorFileWriter.NoError:
+                        saved_files.append(output_path)
+
+                        # Load the saved layer
+                        saved_layer = QgsVectorLayer(output_path, part_name, "ogr")
+                        if saved_layer.isValid():
+                            QgsProject.instance().addMapLayer(saved_layer)
+
+            # Show success message
+            if saved_files:
+                QMessageBox.information(self, "Success",
+                                        f"Successfully created {len(saved_files)} part files:\n" +
+                                        f"Location: {output_dir}\n" +
+                                        f"Files: {base_name}_001.shp to {base_name}_{len(saved_files):03d}.shp")
+            else:
+                QMessageBox.warning(self, "No Files Created",
+                                    "No files were created. Please check the layer and try again.")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Save Error", f"Error saving clustered parts:\n{str(e)}")
+
+    def create_cluster_layer(self, source_layer, feature_ids, layer_name):
+        """Create a memory layer containing only the specified features - FIXED VERSION"""
+        try:
+            # Create memory layer with same geometry type and CRS
+            geom_type_str = "Point" if source_layer.geometryType() == QgsWkbTypes.PointGeometry else "Polygon"
+
+            # Create field definitions string with proper types
+            field_defs = []
+            for field in source_layer.fields():
+                field_name = field.name()
+                # Map QVariant types to memory layer type strings
+                if field.type() == QVariant.Int:
+                    field_type = "integer"
+                elif field.type() == QVariant.Double:
+                    field_type = "double"
+                elif field.type() == QVariant.Bool:
+                    field_type = "boolean"
+                else:
+                    field_type = "string"
+
+                field_defs.append(f"field={field_name}:{field_type}")
+
+            fields_str = "&".join(field_defs) if field_defs else "field=id:integer"
+
+            memory_layer_string = f"{geom_type_str}?crs={source_layer.crs().authid()}&{fields_str}"
+            memory_layer = QgsVectorLayer(memory_layer_string, layer_name, "memory")
+
+            if not memory_layer.isValid():
+                return None
+
+            # Add features to memory layer
+            memory_layer.startEditing()
+            provider = memory_layer.dataProvider()
+
+            for feature_id in feature_ids:
+                feature = source_layer.getFeature(feature_id)
+                if feature.isValid():
+                    # Create new feature with same geometry and attributes
+                    new_feature = QgsFeature(memory_layer.fields())
+                    new_feature.setGeometry(feature.geometry())
+
+                    # Set attributes with proper type conversion
+                    attributes = []
+                    for i, attr_value in enumerate(feature.attributes()):
+                        field = memory_layer.fields().at(i)
+                        converted_value = self._convert_value_for_field(attr_value, field.type())
+                        attributes.append(converted_value)
+
+                    new_feature.setAttributes(attributes)
+                    provider.addFeature(new_feature)
+
+            memory_layer.commitChanges()
+            return memory_layer
+
+        except Exception as e:
+            print(f"Error creating cluster layer: {str(e)}")
+            return None
 
     # =========================================
     # CRS Handling
@@ -828,6 +1251,110 @@ class PhotogrammetryToolsDock(QDockWidget):
 
         return []
 
+    def trim_fields(self):
+        """Remove all fields except standard Bridge and Seamline fields"""
+        layer = self.iface.activeLayer()
+        if not layer or layer.type() != QgsVectorLayer.VectorLayer:
+            QMessageBox.warning(self, "Invalid Layer", "Please select a vector layer!")
+            return
+
+        # Define all standard fields (Bridge + Seamline fields combined)
+        standard_fields = {
+            "Part", "Assign", "Status", "Remarks", "QC", "QCRemarks", "Rework",  # Bridge fields
+            "Geo_Assign", "Geo_Stat", "Geo_QC"  # Additional Seamline fields
+        }
+
+        # Get current fields in the layer
+        current_fields = layer.fields()
+        fields_to_remove = []
+        fields_to_keep = []
+
+        # Check which fields exist and categorize them
+        for field in current_fields:
+            field_name = field.name()
+            if field_name in standard_fields:
+                fields_to_keep.append(field_name)
+            else:
+                fields_to_remove.append(field_name)
+
+        # If no fields to remove, inform user
+        if not fields_to_remove:
+            QMessageBox.information(
+                self,
+                "No Fields to Remove",
+                "All fields in this layer are standard Bridge/Seamline fields.\n"
+                "No trimming needed."
+            )
+            return
+
+        # Show confirmation dialog with details
+        confirmation_msg = (
+            f"This will remove {len(fields_to_remove)} non-standard fields:\n\n"
+            f"Fields to be REMOVED:\n{', '.join(fields_to_remove)}\n\n"
+            f"Fields to be KEPT:\n{', '.join(fields_to_keep) if fields_to_keep else 'None (only geometry will remain)'}\n\n"
+            "This action cannot be undone. Continue?"
+        )
+
+        reply = QMessageBox.question(
+            self,
+            "Confirm Field Trimming",
+            confirmation_msg,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No  # Default to No for safety
+        )
+
+        if reply != QMessageBox.Yes:
+            return
+
+        # Perform the field removal
+        try:
+            layer.startEditing()
+            provider = layer.dataProvider()
+
+            # Get field indices to remove
+            field_indices_to_remove = []
+            for field_name in fields_to_remove:
+                field_index = provider.fields().indexFromName(field_name)
+                if field_index != -1:
+                    field_indices_to_remove.append(field_index)
+
+            # Remove fields (remove in reverse order to maintain correct indices)
+            field_indices_to_remove.sort(reverse=True)
+            if provider.deleteAttributes(field_indices_to_remove):
+                layer.updateFields()
+                layer.commitChanges()
+
+                # Success message
+                QMessageBox.information(
+                    self,
+                    "Field Trimming Complete",
+                    f"Successfully removed {len(fields_to_remove)} fields:\n"
+                    f"{', '.join(fields_to_remove)}\n\n"
+                    f"Remaining fields: {len(fields_to_keep)}\n"
+                    f"{', '.join(fields_to_keep) if fields_to_keep else 'None (geometry only)'}"
+                )
+
+                # Refresh the layer to show changes
+                layer.triggerRepaint()
+                self.iface.layerTreeView().refreshLayerSymbology(layer.id())
+
+            else:
+                layer.rollBack()
+                QMessageBox.critical(
+                    self,
+                    "Field Removal Failed",
+                    "Failed to remove fields. The operation has been cancelled."
+                )
+
+        except Exception as e:
+            layer.rollBack()
+            QMessageBox.critical(
+                self,
+                "Error During Field Trimming",
+                f"An error occurred while trimming fields:\n{str(e)}\n\n"
+                "The operation has been cancelled."
+            )
+
     def add_bridge_fields(self):
         """Add standard bridge fields to layer including Rework field"""
         layer = self.iface.activeLayer()
@@ -872,31 +1399,45 @@ class PhotogrammetryToolsDock(QDockWidget):
         self._add_fields_to_layer(layer, new_fields, "Seamline")
 
     def _add_fields_to_layer(self, layer, new_fields, field_type):
-        """Helper function to add fields to a layer"""
+        """Helper function to add fields to a layer - UPDATED to preserve existing field values"""
         layer.startEditing()
         provider = layer.dataProvider()
         existing_fields = [field.name() for field in provider.fields()]
         added_fields = []
+        skipped_fields = []
 
-        for field_name, field_type in new_fields:
+        for field_name, field_data_type in new_fields:
             if field_name not in existing_fields:
-                provider.addAttributes([QgsField(field_name, field_type)])
+                provider.addAttributes([QgsField(field_name, field_data_type)])
                 added_fields.append(field_name)
+            else:
+                skipped_fields.append(field_name)
 
         layer.updateFields()
 
-        if added_fields:
+        if added_fields or skipped_fields:
             layer.commitChanges()
+
+            # Create detailed message
+            message_parts = []
+
+            if added_fields:
+                message_parts.append(f"Added {len(added_fields)} new {field_type} fields:\n{', '.join(added_fields)}")
+
+            if skipped_fields:
+                message_parts.append(
+                    f"Skipped {len(skipped_fields)} existing fields (preserving current values):\n{', '.join(skipped_fields)}")
+
             QMessageBox.information(
                 self,
-                "Fields Added",
-                f"Added {len(added_fields)} {field_type} fields:\n{', '.join(added_fields)}"
+                "Field Management Complete",
+                "\n\n".join(message_parts)
             )
         else:
             layer.rollBack()
             QMessageBox.information(
                 self,
-                "No Fields Added",
+                "No Changes Made",
                 "All fields already exist in the layer."
             )
 
