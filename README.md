@@ -293,19 +293,25 @@ We welcome contributions! Here's how to help:
 - Test with multiple CRS systems
 - Ensure backward compatibility with QGIS 3.0+
 
-## Changelog
+# 🏷️ Version History
 
-### Version 1.0.0 (Current)
-- ✅ Initial release with full feature set
-- ✅ Production status management with color-coded buttons
-- ✅ QC workflow integration
-- ✅ Precision grid creation with automatic alignment
-- ✅ Advanced buffer tool with smooth edges (50 segments)
-- ✅ Field management for bridge and seamline workflows
-- ✅ Export functionality with proper encoding
-- ✅ Added "Rework" field to standard field sets
-- ✅ Comprehensive CRS handling and validation
-- ✅ Scrollable dock interface with collapsible groups
+### Version 2.0.0 (Current)
+- ✨ Added intelligent feature distribution tool using K-means clustering
+- ✨ Enhanced field management with Rework field support
+- ✨ Added trim fields functionality to remove non-standard fields
+- ✨ Improved multi-layer merge with geometry type filtering
+- ✨ Enhanced CRS handling for accurate measurements
+- ✨ Added temporary scratch layer support
+- 🐛 Improved error handling and user feedback
+- 🐛 Better memory management for large datasets
+- 🐛 Smoother buffer creation with increased segments
+
+### Version 1.0.0
+- 🎉 Initial release with basic photogrammetry tools
+- 🔧 Grid creation, buffering, and vector layer tools
+- 📊 Production and QC status tracking
+- 🗂️ Field management for bridge and seamline workflows
+
 
 ## License
 
