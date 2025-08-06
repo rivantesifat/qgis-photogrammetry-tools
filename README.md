@@ -7,7 +7,8 @@ A comprehensive QGIS plugin designed for photogrammetry workflows, providing ess
 ![Status](https://img.shields.io/badge/status-stable-brightgreen.svg)
 <br>
 <div align="center">
-<img src="Demo.jpg" alt="Description">
+  <img src="Demo_1.jpg" width="45%" />
+  <img src="Demo_2.jpg" width="45%" />
 </div>
 
 ## Overview
@@ -16,27 +17,52 @@ This plugin streamlines photogrammetry workflows by providing a comprehensive to
 
 ## Key Features
 
-### 🎯 Production Management System
-- **Production Status Updater**: Color-coded buttons for marking features as Done/Not Done
-- **QC Status Updater**: Quality control workflow with Done and Smart Geofill options
-- **Smart Status Tracking**: Automated remarks and status updates for selected features
+## 🚀 Features
 
-### 🛠️ Spatial Analysis Tools
-- **Precision Grid Creation**: Generate measurement grids with custom spacing and automatic CRS alignment
-- **Advanced Buffer Tool**: Create buffers with 50 segments for smooth edges and precise measurements
-- **Vector Layer Creation**: Create new Point and Polygon layers with proper CRS handling
-- **Geometry Conversion**: Convert polygons to lines and generate line intersection points
+### 🎯 Feature Distribution Tool (NEW)
+- **Intelligent Clustering**: Distribute features into manageable parts using K-means clustering
+- **Flexible Distribution**: Choose between distributing by number of points per part or total number of parts
+- **Preview & Confirm**: Review distribution before saving
+- **Automatic Part Numbering**: Each part gets a unique identifier
+- **Multi-format Support**: Works with both point and polygon layers
 
-### 📊 Data Management
-- **Field Management**: Add standardized bridge and seamline fields including new "Rework" field
-- **Export Tools**: Save selected features to new shapefiles with proper encoding
-- **CRS Validation**: Automatic coordinate reference system validation for metric units
+### 🏗️ Production Management
+- **Status Tracking**: Mark features as Done, Not Done, No Need to Work, or Smart Geofill
+- **QC Workflow**: Comprehensive quality control status management
+- **Rework Tracking**: New field for tracking rework requirements
+- **Batch Updates**: Update status for multiple selected features at once
+
+### 🗂️ Field Management
+- **Bridge Fields**: Add standard production tracking fields (Part, Assign, Status, Remarks, QC, QCRemarks, Rework)
+- **Seamline Fields**: Add specialized fields for seamline workflows (includes geometry-specific fields)
+- **Field Trimming**: Remove non-standard fields while preserving essential ones
+- **Smart Detection**: Automatically detects existing fields to avoid duplicates
+
+### 🔧 Geospatial Tools
+- **Grid Creation**: Generate precise measurement grids with customizable spacing
+- **Buffer Tool**: Create smooth buffers with enhanced edge quality (50 segments)
+- **Vector Creation**: Create both temporary scratch layers and permanent file-based layers
+- **Layer Conversion**: Convert polygons to lines, generate intersection points
+- **Layer Merging**: Merge multiple vector layers with geometry type filtering
+
+### 📍 CRS Management
+- **Global CRS Selector**: Set working coordinate reference system for all operations
+- **Validation**: Ensures CRS uses meters for accurate measurements
+- **Auto-reprojection**: Automatically handles CRS transformations when needed
+- **Supported CRS**: Pre-configured with common projected coordinate systems
 
 ### 🎨 User Interface
 - **Collapsible Tool Groups**: Organized interface with checkable group boxes
 - **Global CRS Selector**: Centralized coordinate system management
 - **Color-coded Buttons**: Visual status indicators for production workflow
 - **Scrollable Interface**: Compact design that fits in QGIS dock areas
+- 
+## 📋 Requirements
+
+- **QGIS**: Version 3.0 or higher
+- **Python Libraries** (for distribution tool):
+  - `scikit-learn`: For K-means clustering
+  - `numpy`: For numerical operations
 
 ## Supported Coordinate Systems
 
@@ -50,7 +76,7 @@ The plugin is optimized for metric coordinate reference systems:
 ## Installation
 
 ### Method 1: Manual Installation
-1. Download the plugin Zip file. 
+1. Download the latest plugin Zip file. 
 2. Go to Plugins> Manage and Install Plugins...> Install from ZIP> Browse the downloaded file 
 Or
 1. Download and Extract the ZIP
@@ -58,8 +84,11 @@ Or
    - **Windows**: `C:\Users\[username]\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\photogrammetry_tools\`
    - **macOS**: `~/Library/Application Support/QGIS/QGIS3/profiles/default/python/plugins/photogrammetry_tools/`
    - **Linux**: `~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/photogrammetry_tools/`
-3. Restart QGIS
-4. Enable the plugin: **Plugins → Manage and Install Plugins → Installed → Photogrammetry Tools**
+3. For using the Distribution Tool you need to install scikit-learn numpy
+4. Open start menu, search and open "OSGeo4W Shell"
+5. Type "pip install scikit-learn numpy"
+6. Restart QGIS
+7. Enable the plugin: **Plugins → Manage and Install Plugins → Installed → Photogrammetry Tools**
 
 ### Method 2: Development Setup
 ```bash
@@ -77,9 +106,19 @@ mklink /D "C:\Users\[username]\AppData\Roaming\QGIS\QGIS3\profiles\default\pytho
 ## Quick Start Guide
 
 ### 1. Setup Your Workspace
-1. Open the plugin dock: **Plugins → Photogrammetry Tools**
+1. Open the plugin dock: **Plugins → Photogrammetry Tools** the plugin dock will appear on the right side of QGIS.
 2. Select your working CRS from the dropdown
 3. Enable the tool groups you need by checking the group boxes
+
+### 2.Feature Distribution Workflow
+1. **Select Layer**: Choose a point or polygon layer
+2. **Choose Method**: 
+   - "By Number of Points per Part": Specify how many features per part
+   - "By Number of Parts": Specify total number of parts to create
+3. **Set Number**: Enter the desired number value
+4. **Distribute**: Click "Distribute Features"
+5. **Review**: Check the distribution summary in the dialog
+6. **Save**: Confirm to save parts as separate shapefiles
 
 ### 2. Production Status Management
 ```
@@ -135,6 +174,44 @@ Includes all Bridge fields plus:
 - **Storage**: 50MB for plugin installation
 - **Display**: 1024x768 minimum resolution
 
+## 🎨 Interface Overview
+
+### Tool Groups
+- **Production Status Updater**: Quick status updates with color-coded buttons
+- **QC Status Updater**: Quality control workflow management
+- **Distributing Features**: Intelligent feature distribution tool
+- **Grid Creation**: Precise grid generation
+- **Buffer Tool**: Enhanced buffering with smooth edges
+- **Vector Creation Tool**: Layer creation utilities
+- **Conversion Tools**: Format conversion and processing
+- **Field Management**: Schema management for workflows
+- **Export Tools**: Data export utilities
+
+### Color Coding
+- 🟢 **Green**: Done/Completed status
+- 🔴 **Red**: Not Done/Pending status
+- 🔵 **Blue**: No Need to Work/Special status
+- 🟡 **Yellow**: Smart Geofill/Automated status
+
+## 📊 Technical Details
+
+### Feature Distribution Algorithm
+- **Clustering Method**: K-means clustering with scikit-learn
+- **Coordinate Extraction**: 
+  - Points: Direct coordinates
+  - Polygons: Centroid coordinates
+- **Random Seed**: Fixed (42) for reproducible results
+- **Memory Efficient**: Processes large datasets without loading all features into memory
+
+### CRS Support
+- **Primary CRS Options**:
+  - EPSG:28992 (Dutch National Grid)
+  - EPSG:31370 (Belgian Lambert 72)
+  - EPSG:2154 (French Lambert-93)
+  - EPSG:32631 (UTM Zone 31N)
+- **Unit Validation**: Ensures selected CRS uses meters
+- **Auto-transformation**: Handles reprojection automatically
+
 ## Advanced Features
 
 ### CRS Handling
@@ -161,10 +238,19 @@ Includes all Bridge fields plus:
 
 ### Common Issues
 
+**Distribution tool not working**
+- Install required Python libraries: `pip install scikit-learn numpy`
+- Ensure layer has at least 2 features
+- Check that geometry is not empty
+- 
 **Grid not aligned properly**
 - Ensure reference layer has features
 - Check that grid size is appropriate for layer extent
 - Verify CRS uses meters as units
+
+**CRS warnings**
+- Select a CRS that uses meters as units
+- Ensure your data is in a suitable projected coordinate system
 
 **Buffer appears jagged**
 - Plugin creates buffers with 50 segments for smooth curves
@@ -180,6 +266,16 @@ Includes all Bridge fields plus:
 - Select features before clicking status buttons
 - Ensure required fields exist (use Add Bridge/Seamline Fields first)
 - Check that layer is in edit mode
+
+**Memory issues with large datasets**
+- Close unnecessary applications
+- Process data in smaller chunks
+- Use temporary layers for intermediate results
+
+### Performance Tips
+- Use projected coordinate systems for better performance
+- Close unnecessary layers while processing
+- Save work frequently when batch processing
 
 ## Contributing
 
